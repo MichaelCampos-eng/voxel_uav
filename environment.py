@@ -6,7 +6,7 @@ import pygame
 
 class Drone_Env(gym.Env):
     """Custom Environment that follows gym interface."""
-    metadata = {"render_modes": ["human"], "render_fps": 30}
+    metadata = {"render_modes": ["human"], "render_fps": 7}
     window_size = 512
     grid_size = 10
     window = None
@@ -74,6 +74,7 @@ class Drone_Env(gym.Env):
         if np.all(self.agent_state == self.target_state):
             self.index += 1
             reward_traj += 10
+            self.target_state = self.desired_traj[self.index]
 
         # Quit the game if we go out of bounds
         if self.agent_state[0] < 0 or self.agent_state[0] > self.grid_size - 1 or \
@@ -126,20 +127,20 @@ class Drone_Env(gym.Env):
                 pix_square_size / 3,
             )
 
-        # Now we draw the target
-        pygame.draw.circle(
-            canvas,
-            (255, 0, 0),
-            (self.target_state + 0.5) * pix_square_size,
-            pix_square_size / 3,
-        )
-
         # Now we draw the agent
         pygame.draw.circle(
             canvas,
             (222, 232, 222),
             (self.agent_state + 0.5) * pix_square_size,
             pix_square_size / 3,
+        )
+
+        # Now we draw the target
+        pygame.draw.circle(
+            canvas,
+            (255, 0, 0),
+            (self.target_state + 0.5) * pix_square_size,
+            pix_square_size / 4,
         )
 
         # Finally, add some gridlines

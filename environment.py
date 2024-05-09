@@ -12,7 +12,7 @@ class Drone_Env(gym.Env):
     window = None
     clock = None
 
-    global_step = 20
+    global_step = 100
 
     bounds = np.array([grid_size, grid_size])
     action_to_direction = {
@@ -43,18 +43,26 @@ class Drone_Env(gym.Env):
         2) Update the current state given action
         3) If the agent reached the target modified, update self.index
         """
-        reward_bnd = 0
         reward_traj = 0
         reward_obs = 0
         reward_life = 0
+
+        # If we complete the pathway, we finish the game
+        if self.index >= len(self.desired_traj):
+            self.done = True
+            reward = 100
+            return {"agent": self.agent_state, "target": self.target_state}, reward, self.done, False, {}
+        else:
+            self.target_state = self.desired_traj[self.index]
 
         # Update the grid we are working with
         self.global_time = self.global_time % self.global_step
         if self.global_time == 0:
             grid = Drone_Env.generate_random_matrix(self.grid_size, self.grid_size)
             self.grid, self.obstacle_locations = Drone_Env.update_grid(grid, self.agent_state)
+        self.global_time += 1
 
-        # Update target
+        # Get feasible target
         self.target_state = self.next_best_point(self.agent_state, self.target_state)
         direction, speed = action[0], action[1]
         move = self.action_to_direction[direction] * speed
@@ -67,12 +75,6 @@ class Drone_Env(gym.Env):
             self.index += 1
             reward_traj += 10
 
-        # If we complete the pathway, we finish the game
-        if self.index >= len(self.desired_traj):
-            self.done = True
-            reward = 100
-            return {"agent": self.agent_state, "target": self.target_state}, reward, self.done, False, {}
-
         # Quit the game if we go out of bounds
         if self.agent_state[0] < 0 or self.agent_state[0] > self.grid_size - 1 or \
             self.agent_state[1] < 0 or self.agent_state[1] > self.grid_size - 1:
@@ -84,11 +86,10 @@ class Drone_Env(gym.Env):
         if self.grid[r, c] == 1:
             self.done = True
 
-        reward_bnd -= np.sum(np.abs((self.bounds - self.agent_state) // self.grid_size - 1))
         reward_traj -= Drone_Env.manhattan_distance(self.agent_state, self.target_state)
-        reward_obs -= 1/(1 + Drone_Env.closest_manhattan_distance(self.obstacle_locations, self.agent_state))
-        reward_life -= -1
-        reward = reward_bnd + reward_traj + reward_obs + reward_life
+        reward_obs -= 10/(1 + Drone_Env.closest_manhattan_distance(self.obstacle_locations, self.agent_state))
+        reward_life -= 1
+        reward = reward_traj + reward_obs + reward_life
 
         return {"agent": self.agent_state, "target": self.target_state}, reward, self.done, False, {}
 
@@ -124,6 +125,15 @@ class Drone_Env(gym.Env):
                 (obstacle + 0.5) * pix_square_size,
                 pix_square_size / 3,
             )
+
+        # Now we draw the target
+        pygame.draw.circle(
+            canvas,
+            (255, 0, 0),
+            (self.target_state + 0.5) * pix_square_size,
+            pix_square_size / 3,
+        )
+
         # Now we draw the agent
         pygame.draw.circle(
             canvas,
@@ -131,6 +141,7 @@ class Drone_Env(gym.Env):
             (self.agent_state + 0.5) * pix_square_size,
             pix_square_size / 3,
         )
+
         # Finally, add some gridlines
         for x in range(self.grid_size + 1):
             pygame.draw.line(
@@ -198,7 +209,7 @@ class Drone_Env(gym.Env):
         return trajectory
 
     @staticmethod
-    def generate_random_matrix(rows, cols, prob_of_ones=0.1):
+    def generate_random_matrix(rows, cols, prob_of_ones=0.01):
         if not 0 <= prob_of_ones <= 1:
             raise ValueError("Probability of ones must be between 0 and 1.")
         matrix = np.random.choice([1, 0], size=(rows, cols), p=[prob_of_ones, 1 - prob_of_ones])
@@ -222,5 +233,7 @@ class Drone_Env(gym.Env):
 
     @staticmethod
     def closest_manhattan_distance(indices, point):
+        if indices.size == 0:
+            return 0
         point_tiled = np.tile(point, (indices.shape[0], 1))
         return np.min(Drone_Env.manhattan_distance(indices, point_tiled))

@@ -30,7 +30,7 @@ class Drone_Env(gym.Env):
         # Define action and observation space
         # They must be gym.spaces objects
         # Example when using discrete actions:
-        self.action_space = spaces.MultiDiscrete([4, 3])
+        self.action_space = spaces.MultiDiscrete([4, 2])
         # Example for using image as input (channel-first; channel-last also works):
         self.observation_space = spaces.Dict({
             "agent": spaces.Box(0, self.grid_size - 1, shape=(2,), dtype=int),
@@ -43,15 +43,13 @@ class Drone_Env(gym.Env):
         2) Update the current state given action
         3) If the agent reached the target modified, update self.index
         """
-        reward_traj = 0
-        reward_obs = 0
-        reward_life = 0
+        total_reward = 0
 
         # If we complete the pathway, we finish the game
         if self.index >= len(self.desired_traj):
             self.done = True
-            reward = 100
-            return {"agent": self.agent_state, "target": self.target_state}, reward, self.done, False, {}
+            total_reward = 1000
+            return {"agent": self.agent_state, "target": self.target_state}, total_reward, self.done, False, {}
         else:
             self.target_state = self.desired_traj[self.index]
 
@@ -65,34 +63,38 @@ class Drone_Env(gym.Env):
         # Get feasible target
         self.target_state = self.next_best_point(self.agent_state, self.target_state)
         direction, speed = action[0], action[1]
-        move = self.action_to_direction[direction] * speed
+        move = self.action_to_direction[direction] * (speed + 1)
 
         # Update agent
         self.agent_state += move
 
-        # If we reach the target position, we increase reward
-        if np.all(self.agent_state == self.target_state):
-            self.index += 1
-            reward_traj += 10
-            self.target_state = self.desired_traj[self.index]
-
         # Quit the game if we go out of bounds
         if self.agent_state[0] < 0 or self.agent_state[0] > self.grid_size - 1 or \
-            self.agent_state[1] < 0 or self.agent_state[1] > self.grid_size - 1:
+                self.agent_state[1] < 0 or self.agent_state[1] > self.grid_size - 1:
             self.done = True
-            reward = -100
-            return {"agent": self.agent_state, "target": self.target_state}, reward, self.done, False, {}
+            total_reward -= 100
+            return {"agent": self.agent_state, "target": self.target_state}, total_reward, self.done, False, {}
 
+        # Quit if collided with object
         r, c = self.agent_state[0], self.agent_state[1]
         if self.grid[r, c] == 1:
             self.done = True
+            total_reward -= 100
+            return {"agent": self.agent_state, "target": self.target_state}, total_reward, self.done, False, {}
 
-        reward_traj -= Drone_Env.manhattan_distance(self.agent_state, self.target_state)
-        reward_obs -= 10/(1 + Drone_Env.closest_manhattan_distance(self.obstacle_locations, self.agent_state))
-        reward_life -= 1
-        reward = reward_traj + reward_obs + reward_life
+        # If we reach the target position, we increase reward
+        if np.all(self.agent_state == self.target_state):
+            self.index += 1
+            total_reward += 1
 
-        return {"agent": self.agent_state, "target": self.target_state}, reward, self.done, False, {}
+        d = Drone_Env.manhattan_distance(self.agent_state, self.target_state)
+        reward_traj = -d / (2 * self.grid_size)
+
+        # Another situtation where reward_obs added
+        reward_obs = -1/(1 + Drone_Env.closest_manhattan_distance(self.obstacle_locations, self.agent_state))
+        total_reward += reward_traj + reward_obs
+
+        return {"agent": self.agent_state, "target": self.target_state}, total_reward, self.done, False, {}
 
     def reset(self, seed=None, options=None):
         self.global_time = 0

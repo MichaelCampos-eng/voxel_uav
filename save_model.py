@@ -15,7 +15,7 @@ def save_model(models_dir, algo, policy, log_name):
     model = algo(policy, env, verbose=1, tensorboard_log="logs")
 
     TIMESTEPS = 10000
-    for i in range(1, 100000):
+    for i in range(1, 10000):
         model.learn(total_timesteps=TIMESTEPS, reset_num_timesteps=False, tb_log_name=log_name)
         model.save(f"{models_dir}/{TIMESTEPS * i}")
 
